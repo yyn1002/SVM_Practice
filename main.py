@@ -52,7 +52,7 @@ def showData(line=None):
 
 
 def selectJrand(i, m):
-    j = i  
+    j = i
     while j == i:
         j = int(random.uniform(0, m))
     return j
@@ -107,22 +107,25 @@ def smo(dataArr, yArr, C, toler, maxIter):
                 yi*ui >= 1 and alpha = 0   正常分类
                 yi*ui == 1 and 0 < alpha < C 边界上面
                 yi*ui < 1 and alpha = C   边界之间
-            # 0 <= alphas[i] <= C，由于 0 和 C 是边界值，已经在边界上的值不能够再
-              减小或增大，因此无法进行优化，
-            # yArr[i]*Ei = yArr[i]*（fXi - 1），表示发生错误的概率，其给对值超出了 
-              toler，才需要优化 
-              比如，如果 (yArr[i]*Ei < -toler)，此时 alpha 应该为 C ,但是其值小于
-              C，那就需要优化，同理如果 (yArr[i]*Ei > toler)，此时 alpha 应该为 0 ,
-              但是其值却大于 0，也需要优化。
+
+            # yArr[i]*Ei = yArr[i]*（fXi - 1），toler为容错率。
+              需要优化的情况为：如果 (yArr[i]*Ei < -toler)，此时 alpha 应该为 C ,但是其值小于C，那就需要优化，
+              同理如果 (yArr[i]*Ei > toler)，此时 alpha 应该为 0 ,但是其值却大于 0，也需要优化。
             """
             if (((yArr[i] * Ei < -toler) and (alphas[i] < C)) or
-                    ((yArr[i] * Ei > toler) and (alphas[i] > 0))):
-                # alpha2，随机选取非 i 的一个点，进行优化比较
+                    ((yArr[i] * Ei > toler) and (alphas[i] > 0))):  # 选取alpha1不满足KKT条件
+
+                # 选取alpha2，随机选取非 i 的一个点，判断是否满足KKT条件
                 j = selectJrand(i, numSample)
 
                 # 预测样本 j 的结果
                 fXj = np.sum(alphas * yArr[:, np.newaxis] * dataArr * dataArr[j, :]) + b
                 Ej = fXj - yArr[j]
+
+                # 如果满足KKT条件，则不需优化，continue
+                if (((yArr[j] * Ej < -toler) and (alphas[j] >= C)) or
+                        ((yArr[j] * Ej > toler) and (alphas[j] <= 0))):
+                    continue
 
                 # 更新 alpha 前先复制，作为 old
                 alphaIold = alphas[i].copy()
@@ -135,10 +138,7 @@ def smo(dataArr, yArr, C, toler, maxIter):
                 else:
                     L = max(0, alphas[j] + alphas[i] - C)
                     H = min(C, alphas[j] + alphas[i])
-                # 如果 L == H，则不需优化，continue
-                if L == H:
-                    print("L == H")
-                    continue
+
                 # 计算 eta，eta 是 alphas[j] 的最优修改量，如果 eta == 0，需要退出
                 eta = np.sum(dataArr[i, :] * dataArr[i, :]) + \
                       np.sum(dataArr[j, :] * dataArr[j, :]) - \
@@ -146,16 +146,16 @@ def smo(dataArr, yArr, C, toler, maxIter):
                 if eta <= 0:
                     print("eta <= 0")
                     continue
-                # 计算出新的 alphas[j] 值
+                # 计算出新的 alpha2 值
                 alphas[j] = alphaJold + yArr[j] * (Ei - Ej) / eta
-                # 对 alphas[j] 进行修正
+                # 对 alpha2 进行修正
                 alphas[j] = clipAlpha(alphas[j], H, L)
 
-                # 检查alpha[j]是否只是轻微的改变，如果是的话，就退出for循环
+                # 检查alpha2是否只是轻微的改变，如果是的话，就继续选取alpha2
                 if abs(alphas[j] - alphaJold) < 0.00001:
                     print("j is not moving enough")
                     continue
-                # 下面对 i 进行修正，修改量与 j 相同，但方向相反
+                # 更新alpha1
                 alphas[i] = alphaIold + yArr[i] * yArr[j] * (alphaJold - alphas[j])
 
                 # 计算参数 b
