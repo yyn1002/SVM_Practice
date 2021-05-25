@@ -109,7 +109,7 @@ def smo(dataArr, yArr, C, toler, maxIter):
                 yi*ui < 1 and alpha = C   边界之间
             # 0 <= alphas[i] <= C，由于 0 和 C 是边界值，已经在边界上的值不能够再
               减小或增大，因此无法进行优化，
-            # yArr[i]*Ei = yArr[i]*fXi - 1，表示发生错误的概率，其给对值超出了 
+            # yArr[i]*Ei = yArr[i]*（fXi - 1），表示发生错误的概率，其给对值超出了 
               toler，才需要优化 
               比如，如果 (yArr[i]*Ei < -toler)，此时 alpha 应该为 C ,但是其值小于
               C，那就需要优化，同理如果 (yArr[i]*Ei > toler)，此时 alpha 应该为 0 ,
