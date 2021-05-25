@@ -24,7 +24,7 @@ def create_data():
     return data[:, :2], data[:, -1]
 
 
-def showData(filename, line=None):
+def showData(line=None):
     dataArr, yArr = create_data()
     data_class_1_index = np.where(yArr == -1)
     data_class_1 = dataArr[data_class_1_index, :].reshape(-1, 2)
@@ -52,13 +52,13 @@ def showData(filename, line=None):
 
 
 def selectJrand(i, m):
-    j = i  # we want to select any J not equal to i
+    j = i  
     while j == i:
         j = int(random.uniform(0, m))
     return j
 
 
-# 对 alpha 的修正函数
+# 对 alpha2 的修正函数
 def clipAlpha(aj, H, L):
     if aj > H:
         aj = H
@@ -68,13 +68,13 @@ def clipAlpha(aj, H, L):
 
 
 # 建立算法
-def smoSimple(dataArr, yArr, C, toler, maxIter):
-    """smoSimple
+def smo(dataArr, yArr, C, toler, maxIter):
+    """smo
     Args:
         dataArr    特征集合
         yArr       类别标签
         C   松弛变量(常量值)，允许有些数据点可以处于分隔面的错误一侧。
-            控制最大化间隔和保证大部分的函数间隔小于 1.0 这两个目标的权重。
+            控制最大化间隔和保证大部分的函数间隔小于 1.0。
             可以通过调节该参数达到不同的结果。
         toler   容错率（是指在某个体系中能减小一些因素或选择对某个系统产生不稳定的概率。）
         maxIter 退出前最大的循环次数（alpha 不发生变化时迭代的次数）
@@ -84,7 +84,7 @@ def smoSimple(dataArr, yArr, C, toler, maxIter):
     """
     numSample, numDim = dataArr.shape  # 100 和 2
 
-    # 初始化要求的参数值 b 和系数 alphas(数量等于样本数)
+    # 初始化参数值 b 和系数 alphas
     b = 0
     alphas = np.zeros((numSample, 1))
 
@@ -97,7 +97,8 @@ def smoSimple(dataArr, yArr, C, toler, maxIter):
         """
         alphaPairsChanged = 0
         for i in range(numSample):
-            # 首先针对第 i 个样本给出我们预测的类别
+            #  alpha1选取，按顺序遍历，选不满足KKT条件的
+            # 首先对第 i 个样本预测类别
             fXi = np.sum(alphas * yArr[:, np.newaxis] * dataArr * dataArr[i, :]) + b
             # 计算 Ei，也相当于误差
             Ei = fXi - yArr[i]
@@ -116,40 +117,38 @@ def smoSimple(dataArr, yArr, C, toler, maxIter):
             """
             if (((yArr[i] * Ei < -toler) and (alphas[i] < C)) or
                     ((yArr[i] * Ei > toler) and (alphas[i] > 0))):
-                # 到这儿说明满足了优化的条件，我们随机选取非 i 的一个点，进行优化比较
+                # alpha2，随机选取非 i 的一个点，进行优化比较
                 j = selectJrand(i, numSample)
 
                 # 预测样本 j 的结果
                 fXj = np.sum(alphas * yArr[:, np.newaxis] * dataArr * dataArr[j, :]) + b
                 Ej = fXj - yArr[j]
 
-                # 更新 alpha 前先复制一下，作为 old
+                # 更新 alpha 前先复制，作为 old
                 alphaIold = alphas[i].copy()
                 alphaJold = alphas[j].copy()
 
-                # 计算 L 和 H, alpha 和 L,H 的关系是 0 <= L <= alpha <= H <= C
-                # 异号的情况, alpha 相减, 否则同号，相加
+                # 计算 L 和 H
                 if yArr[i] != yArr[j]:
                     L = max(0, alphas[j] - alphas[i])
                     H = min(C, C + alphas[j] - alphas[i])
                 else:
                     L = max(0, alphas[j] + alphas[i] - C)
                     H = min(C, alphas[j] + alphas[i])
-                # 如果 L == H，那就没什么优化的了，continue
+                # 如果 L == H，则不需优化，continue
                 if L == H:
                     print("L == H")
                     continue
                 # 计算 eta，eta 是 alphas[j] 的最优修改量，如果 eta == 0，需要退出
-                # for 循环迭代的过程，实际上是比较边界值，取较小，在此先不处理
                 eta = np.sum(dataArr[i, :] * dataArr[i, :]) + \
                       np.sum(dataArr[j, :] * dataArr[j, :]) - \
                       2. * np.sum(dataArr[i, :] * dataArr[j, :])
                 if eta <= 0:
                     print("eta <= 0")
                     continue
-                # 准备好之后，就可以计算出新的 alphas[j] 值
+                # 计算出新的 alphas[j] 值
                 alphas[j] = alphaJold + yArr[j] * (Ei - Ej) / eta
-                # 此时还需要对 alphas[j] 进行修正
+                # 对 alphas[j] 进行修正
                 alphas[j] = clipAlpha(alphas[j], H, L)
 
                 # 检查alpha[j]是否只是轻微的改变，如果是的话，就退出for循环
@@ -159,7 +158,7 @@ def smoSimple(dataArr, yArr, C, toler, maxIter):
                 # 下面对 i 进行修正，修改量与 j 相同，但方向相反
                 alphas[i] = alphaIold + yArr[i] * yArr[j] * (alphaJold - alphas[j])
 
-                # 下面计算参数 b
+                # 计算参数 b
                 bi = b - Ei - yArr[i] * (alphas[i] - alphaIold) * np.sum(dataArr[i, :] * dataArr[i, :]) - \
                      yArr[j] * (alphas[j] - alphaJold) * np.sum(dataArr[i, :] * dataArr[j, :])
                 bj = b - Ej - yArr[i] * (alphas[i] - alphaIold) * np.sum(dataArr[i, :] * dataArr[j, :]) - \
@@ -187,17 +186,17 @@ def smoSimple(dataArr, yArr, C, toler, maxIter):
     return b, alphas
 
 
-def testSVM():
+def SVM():
     dataArr, yArr = create_data()
     C = 0.6
     toler = 0.001
     maxIter = 40
-    b, alphas = smoSimple(dataArr, yArr, C, toler, maxIter)
+    b, alphas = smo(dataArr, yArr, C, toler, maxIter)
     return b, alphas
 
 
 if __name__ == "__main__":
-    b, alphas = testSVM()
+    b, alphas = SVM()
     print(alphas)
 
-    showData("testSet.txt", line=(b, alphas))
+    showData(line=(b, alphas))
